@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StroiMart – Демо</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+
+<header class="sticky top-0 z-10 bg-slate-950 border-b-4 border-orange-500">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="text-2xl font-black tracking-tight">Stroi<span class="text-orange-500">Mart</span></div>
+    <div class="hidden sm:block text-sm text-slate-400">Строителни материали за майстори и фирми</div>
+    <button id="cartBtn" class="bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold px-4 py-2 rounded">
+      Количка (<span id="cartCount">0</span>)
+    </button>
+  </div>
+</header>
+
+<section class="max-w-6xl mx-auto px-4 py-8">
+  <h1 class="text-3xl sm:text-4xl font-black">Бързи поръчки за <span class="text-orange-500">обекта</span></h1>
+  <p class="text-slate-400 mt-2">Палетни отстъпки, наличност по складове и автоматичен калкулатор за доставка.</p>
+</section>
+
+<main class="max-w-6xl mx-auto px-4 pb-16 grid gap-6 md:grid-cols-2 lg:grid-cols-3" id="grid"></main>
+
+<!-- Cart -->
+<aside id="cart" class="fixed inset-y-0 right-0 w-full sm:w-96 bg-slate-950 border-l-4 border-orange-500 p-5 overflow-y-auto translate-x-full transition-transform z-20">
+  <div class="flex justify-between items-center mb-4">
+    <h2 class="text-xl font-black">Количка</h2>
+    <button id="closeCart" class="text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+  </div>
+  <div id="cartItems" class="space-y-3"></div>
+  <div id="cartSummary" class="mt-6 border-t border-slate-700 pt-4 space-y-2 text-sm"></div>
+</aside>
+
+<script>
+const PRODUCTS = [
+  { id: 1, title: 'Циментово лепило C2 25кг', cat: 'Лепила', weightKg: 25, volumeM3: 0.02, unit: 'торби',
+    tiers: [[1, 12.00], [11, 10.50], [48, 9.20]],
+    specs: { 'Якост на сцепление': '≥ 1.0 MPa', 'Разходна норма': '4–5 кг/м²', 'Време за съхнене': '24 ч' },
+    stock: { 'София': 320, 'Пловдив': 140, 'Варна': 0 } },
+  { id: 2, title: 'Бетон-контакт грунд 15л', cat: 'Грундове', weightKg: 20, volumeM3: 0.017, unit: 'кофи',
+    tiers: [[1, 38.00], [6, 34.50], [24, 31.00]],
+    specs: { 'Якост на сцепление': '≥ 0.8 MPa', 'Разходна норма': '0.3 л/м²', 'Време за съхнене': '4 ч' },
+    stock: { 'София': 85, 'Пловдив': 40, 'Варна': 22 } },
+  { id: 3, title: 'Цимент CEM II 42.5N 25кг', cat: 'Цимент', weightKg: 25, volumeM3: 0.018, unit: 'торби',
+    tiers: [[1, 11.50], [20, 10.40], [56, 9.60]],
+    specs: { 'Якост (28 дни)': '≥ 42.5 MPa', 'Разходна норма': '300 кг/м³ бетон', 'Време за съхнене': '28 дни' },
+    stock: { 'София': 1200, 'Пловдив': 600, 'Варна': 450 } },
+  { id: 4, title: 'Тухла гладка 25×12×6.5', cat: 'Зидария', weightKg: 3.2, volumeM3: 0.002, unit: 'бр.',
+    tiers: [[1, 0.65], [500, 0.58], [2000, 0.52]],
+    specs: { 'Якост на натиск': 'М15', 'Разходна норма': '~50 бр./м²', 'Време за съхнене': '—' },
+    stock: { 'София': 24000, 'Пловдив': 8000, 'Варна': 0 } },
+  { id: 5, title: 'XPS изолация 5см (1.25×0.6м)', cat: 'Изолации', weightKg: 1.1, volumeM3: 0.0375, unit: 'плочи',
+    tiers: [[1, 9.80], [20, 8.90], [100, 8.20]],
+    specs: { 'Якост на натиск': '300 kPa', 'Разходна норма': '1.33 пл./м²', 'Време за съхнене': '—' },
+    stock: { 'София': 500, 'Пловдив': 210, 'Варна': 90 } },
+  { id: 6, title: 'Гипсокартон 12.5мм (1.2×2.5м)', cat: 'Сухо строителство', weightKg: 28, volumeM3: 0.04, unit: 'плочи',
+    tiers: [[1, 11.90], [10, 10.90], [50, 9.90]],
+    specs: { 'Дебелина': '12.5 мм', 'Разходна норма': '0.33 пл./м²', 'Време за съхнене': '—' },
+    stock: { 'София': 430, 'Пловдив': 120, 'Варна': 60 } },
+];
+
+const cart = {}; // id -> qty
+const fmt = n => n.toFixed(2).replace('.', ',') + ' лв.';
+const priceFor = (p, q) => [...p.tiers].reverse().find(t => q >= t[0])[1];
+
+function tierLabel(p, i) {
+  const from = p.tiers[i][0], next = p.tiers[i + 1];
+  return next ? `${from}–${next[0] - 1}` : `${from}+`;
+}
+
+function renderGrid() {
+  document.getElementById('grid').innerHTML = PRODUCTS.map(p => `
+    <article class="bg-slate-800 rounded-lg overflow-hidden border border-slate-700 flex flex-col">
+      <div class="h-28 bg-gradient-to-br from-slate-700 to-slate-900 flex items-end p-4">
+        <span class="text-xs font-bold uppercase bg-yellow-400 text-slate-950 px-2 py-1 rounded">${p.cat}</span>
+      </div>
+      <div class="p-4 flex-1 flex flex-col gap-3">
+        <h3 class="font-bold text-lg leading-snug">${p.title}</h3>
+        <table class="w-full text-sm">
+          <caption class="text-left text-xs uppercase text-slate-400 mb-1">Ценова скала (${p.unit})</caption>
+          ${p.tiers.map((t, i) => `<tr class="border-t border-slate-700"><td class="py-1 text-slate-300">${tierLabel(p, i)}</td><td class="py-1 text-right font-bold text-orange-400">${fmt(t[1])}</td></tr>`).join('')}
+        </table>
+        <table class="w-full text-xs text-slate-300">
+          ${Object.entries(p.specs).map(([k, v]) => `<tr class="border-t border-slate-700"><td class="py-1 text-slate-400">${k}</td><td class="py-1 text-right">${v}</td></tr>`).join('')}
+        </table>
+        <div class="flex flex-wrap gap-2 text-xs">
+          ${Object.entries(p.stock).map(([w, n]) => `<span class="px-2 py-1 rounded ${n ? 'bg-emerald-900 text-emerald-300' : 'bg-red-950 text-red-400'}">${w}: ${n ? n : 'няма'}</span>`).join('')}
+        </div>
+        <div class="mt-auto flex gap-2 pt-2">
+          <input id="q${p.id}" type="number" min="1" value="1" class="w-24 bg-slate-900 border border-slate-600 rounded px-2 py-2">
+          <button onclick="add(${p.id})" class="flex-1 bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold rounded py-2">В количката</button>
+        </div>
+        <button onclick="alert('Демо: тук се сваля PDF информационен лист.')" class="text-xs text-slate-400 hover:text-orange-400 underline text-left">⬇ Datasheet PDF</button>
+      </div>
+    </article>`).join('');
+}
+
+// Transport engine
+function transport(weightKg, volumeM3) {
+  if (weightKg === 0) return null;
+  if (weightKg <= 1000 && volumeM3 <= 3) return { type: 'Бус', cost: 35 + weightKg * 0.05 };
+  if (weightKg <= 5000 && volumeM3 <= 15) return { type: 'Палетно карго', cost: 90 + weightKg * 0.04 };
+  return { type: 'Камион с кран', cost: 220 + weightKg * 0.03 };
+}
+
+function add(id) {
+  const q = parseInt(document.getElementById('q' + id).value, 10) || 1;
+  cart[id] = (cart[id] || 0) + Math.max(1, q);
+  renderCart();
+  document.getElementById('cart').classList.remove('translate-x-full');
+}
+
+function setQty(id, q) {
+  q = parseInt(q, 10);
+  if (!q || q < 1) delete cart[id]; else cart[id] = q;
+  renderCart();
+}
+
+function renderCart() {
+  const ids = Object.keys(cart).map(Number);
+  document.getElementById('cartCount').textContent = ids.length;
+  let subtotal = 0, weight = 0, volume = 0;
+  document.getElementById('cartItems').innerHTML = ids.length ? ids.map(id => {
+    const p = PRODUCTS.find(x => x.id === id), q = cart[id], pr = priceFor(p, q);
+    subtotal += pr * q; weight += p.weightKg * q; volume += p.volumeM3 * q;
+    return `<div class="bg-slate-800 rounded p-3">
+      <div class="font-semibold text-sm">${p.title}</div>
+      <div class="flex items-center justify-between mt-2 text-sm">
+        <input type="number" min="0" value="${q}" onchange="setQty(${id}, this.value)" class="w-20 bg-slate-900 border border-slate-600 rounded px-2 py-1">
+        <span class="text-slate-400">${fmt(pr)} / ${p.unit.replace(/ы$/, '')}</span>
+        <span class="font-bold text-orange-400">${fmt(pr * q)}</span>
+      </div></div>`;
+  }).join('') : '<p class="text-slate-400 text-sm">Количката е празна.</p>';
+
+  const t = transport(weight, volume);
+  document.getElementById('cartSummary').innerHTML = t ? `
+    <div class="flex justify-between"><span class="text-slate-400">Общо тегло</span><span>${weight >= 1000 ? (weight / 1000).toFixed(2) + ' т' : weight.toFixed(1) + ' кг'}</span></div>
+    <div class="flex justify-between"><span class="text-slate-400">Общ обем</span><span>${volume.toFixed(2)} m³</span></div>
+    <div class="flex justify-between"><span class="text-slate-400">Тип превоз</span><span class="text-yellow-400 font-bold">${t.type}</span></div>
+    <div class="flex justify-between"><span class="text-slate-400">Доставка</span><span>${fmt(t.cost)}</span></div>
+    <div class="flex justify-between"><span class="text-slate-400">Продукти</span><span>${fmt(subtotal)}</span></div>
+    <div class="flex justify-between text-lg font-black border-t border-slate-700 pt-2"><span>Общо</span><span class="text-orange-400">${fmt(subtotal + t.cost)}</span></div>
+    <label class="flex items-center gap-2 pt-2 text-slate-300"><input type="checkbox"> Фирма (ЕИК, фактура)</label>
+    <button class="w-full mt-2 bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold rounded py-2" onclick="alert('Демо: тук започва Checkout.')">Към поръчка</button>` : '';
+}
+
+document.getElementById('cartBtn').onclick = () => document.getElementById('cart').classList.remove('translate-x-full');
+document.getElementById('closeCart').onclick = () => document.getElementById('cart').classList.add('translate-x-full');
+renderGrid(); renderCart();
+</script>
+</body>
+</html>
